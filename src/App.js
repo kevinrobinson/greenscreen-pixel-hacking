@@ -1,7 +1,8 @@
-import React, {useState, useEffect, useRef} from 'react';
-import ice from './ice.jpg'
+import React, {useState, useEffect, useRef, useCallback} from 'react';
+import _ from 'lodash'
 import './App.css';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import * as bodyPix from '@tensorflow-models/body-pix';
 
 
 function App() {
@@ -10,30 +11,44 @@ function App() {
   const [colors, setColors] = useState([]);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const screenRef = useRef(null);
 
+  const predictions = []; // useCoco(canvasRef.current, isCameraReady);
+  const segmentation = useBodyPix(canvasRef.current);
+
+  // useTransformedCanvas(videoRef.current, canvasRef.current, isCameraReady, setIsCameraReady, useCallback(ctx => {
+  //   // greenify(canvasRef.current, ctx, colors);
+  //   mask(canvasRef.current, ctx, segmentation);
+  // }, [segmentation]));
+
+  const videoEl = videoRef.current;
+  const canvasEl = canvasRef.current;
   useEffect(() => {
+    if (!videoEl) return;
     console.log('setting up camera...');
-    setupWebcam(videoRef.current).then(() => {
+    setupWebcam(videoEl).then(() => {
       setIsCameraReady(true)
       console.log('  camera is ready.')
     });
-  }, [videoRef]);
+  }, [videoEl, setIsCameraReady]);
+
+  const readSegmentation = useCallback(() => {
+    return segmentation;
+  }, [segmentation]);
 
   useEffect(() => {
+    if (!canvasEl) return;
+    if (!isCameraReady) return;
     var abort = false;
-    const ctx = canvasRef.current.getContext('2d');
+    const ctx = canvasEl.getContext('2d');
     function tick() {
-      ctx.drawImage(videoRef.current, 0, 0, 400*3/4, 300/2); // no idea what this transform is from...
-      greenify(canvasRef.current, ctx, colors);
+      ctx.drawImage(videoEl, 0, 0, 400*3/4, 300/2); // no idea what this transform is from...
+      mask(canvasEl, ctx, segmentation);
       if (!abort) requestAnimationFrame(tick);
     }
     console.log('first tick...');
     tick();
     return () => abort = true;
-  }, [videoRef, isCameraReady, colors]);
-
-  const predictions = useCoco(canvasRef.current, isCameraReady);
+  }, [videoEl, canvasEl, isCameraReady, readSegmentation]);
 
   return (
     <div className="App">
@@ -71,21 +86,9 @@ function App() {
                 x: (e.clientX - rect.left) / (rect.right - rect.left) * canvas.width,
                 y: (e.clientY - rect.top) / (rect.bottom - rect.top) * canvas.height
               };
-              console.log('e', e);
               const ctx = canvas.getContext('2d');
-              const d = ctx.getImageData(x, y, 1, 1);
-
-              const color = d.data;
-              setColors(colors.concat(color)); // TODO(kr) unique these
-
-              // const out = screenRef.current.getContext('2d');
-              // out.fillStyle = rgbaify(color);
-              // out.fillRect(x, y, 10, 10);
-              // console.log('colors.concat(color)', colors.concat(color));
-
-              // console.log('x,y', x, y);
-              // out.putImageData(d, x, y);
-              // console.log('out', out, d, x, y);
+              const color = ctx.getImageData(x, y, 1, 1).data;
+              setColors(_.uniqWith(colors.concat(color), _.isEqual)); // TODO(kr) unique these
             }}
             style={{
               position: 'absolute',
@@ -96,13 +99,6 @@ function App() {
             }}
           ></canvas>
         </div>
-        <canvas
-          ref={screenRef}
-          style={{
-            width: 400,
-            height: 300
-          }}
-        ></canvas>
       </div>
       <div style={{minHeight: 100}}>{colors.map(color => (
         <div key={rgbaify(color)} style={{display: 'inline-block', fontSize: 14, width: 64, height: 64, background: rgbaify(color)}}>
@@ -114,6 +110,7 @@ function App() {
       <div>{(predictions || []).map(prediction => (
         <div key={[prediction.class, prediction.score].join(':')}>{prediction.score.toFixed(3)} for {prediction.class}</div>
       ))}</div>
+      <pre>{segmentation ? 'segmented' : 'nothing'}</pre>
     </div>
   );
 }
@@ -212,4 +209,66 @@ function useCoco(canvas, isReady) {
   }, [coco, isReady, canvas]);
 
   return predictions;
+}
+
+function useBodyPix(el, options = {}) {
+  const [model, setModel] = useState(null);
+  const [segmentation, setSegmentation] = useState(null);
+  
+  useEffect(() => {
+    bodyPix.load().then(setModel);
+  }, []);
+
+  useEffect(() => {
+    if (!model) return;
+    var abort = false;
+    function predict() {
+      // console.log('segmenting...');
+      const outputStride = options.outputStride || 16;
+      const segmentationThreshold = options.segmentationThreshold || 0.5;
+      model.estimatePersonSegmentation(el, outputStride, segmentationThreshold).then(segmentation => {
+        setSegmentation(segmentation);
+        // console.log('  segmented.', segmentation);
+        if (!abort) setTimeout(predict, 5000);
+      });
+    }
+    predict();
+    return () => abort = true;    
+  }, [el, model, options]);
+
+  return segmentation;
+}
+
+
+function useTransformedCanvas(videoEl, canvasEl, isCameraReady, setIsCameraReady, modify) {
+  useEffect(() => {
+    if (!videoEl) return;
+    console.log('setting up camera...');
+    setupWebcam(videoEl).then(() => {
+      setIsCameraReady(true)
+      console.log('  camera is ready.')
+    });
+  }, [videoEl, setIsCameraReady]);
+
+  useEffect(() => {
+    if (!canvasEl) return;
+    if (!isCameraReady) return;
+    var abort = false;
+    const ctx = canvasEl.getContext('2d');
+    function tick() {
+      ctx.drawImage(videoEl, 0, 0, 400*3/4, 300/2); // no idea what this transform is from...
+      modify(ctx);
+      if (!abort) requestAnimationFrame(tick);
+    }
+    console.log('first tick...');
+    tick();
+    return () => abort = true;
+  }, [videoEl, canvasEl, isCameraReady, modify]);
+}
+
+
+function mask(canvas, ctx, segmentation) {
+  const maskBackground = true;
+  const maskImage = bodyPix.toMaskImageData(segmentation, maskBackground);
+  bodyPix.drawMask(canvas, canvas, maskImage);
 }
