@@ -1,13 +1,11 @@
 import React, {useState, useEffect, useRef} from 'react';
-import chroma from 'chroma-js';
 import ice from './ice.jpg'
 import './App.css';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 
 
 function App() {
-  const [coco, setCoco] = useState(null);
-  const [predictions, setPredictions] = useState(null);
+  const [i, setI] = useState(0);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [colors, setColors] = useState([]);
   const videoRef = useRef(null);
@@ -35,21 +33,12 @@ function App() {
     return () => abort = true;
   }, [videoRef, isCameraReady, colors]);
 
-  useEffect(() => {
-    console.log('load');
-    cocoSsd.load().then(model => setCoco(model));
-  }, []);
-
-  useEffect(() => {
-    if (!coco) return;
-    console.log('effect');
-    coco.detect(canvasRef.current).then(setPredictions);
-  }, [coco, isCameraReady, canvasRef]);
+  const predictions = useCoco(canvasRef.current, isCameraReady);
 
   return (
     <div className="App">
       <div style={{display: 'flex'}}>
-        <div style={{position: 'relative'}}>
+        <div style={{position: 'relative', width: 400, height: 300}}>
           <video
             style={{position: 'absolute', opacity: 0}}
             key="video"
@@ -66,7 +55,7 @@ function App() {
             width="400"
             height="300"
           ></video>
-          <img alt="ice" src={ice} style={{
+          <img alt="ice" src={`https://picsum.photos/400/300?${i}`} style={{
             position: 'absolute',
             left: 0,
             top: 0,
@@ -86,12 +75,14 @@ function App() {
               const ctx = canvas.getContext('2d');
               const d = ctx.getImageData(x, y, 1, 1);
 
-              const out = screenRef.current.getContext('2d');
               const color = d.data;
-              setColors(colors.concat(color));
-              out.fillStyle = rgbaify(color);
-              out.fillRect(x, y, 10, 10);
-              console.log('colors.concat(color)', colors.concat(color));
+              setColors(colors.concat(color)); // TODO(kr) unique these
+
+              // const out = screenRef.current.getContext('2d');
+              // out.fillStyle = rgbaify(color);
+              // out.fillRect(x, y, 10, 10);
+              // console.log('colors.concat(color)', colors.concat(color));
+
               // console.log('x,y', x, y);
               // out.putImageData(d, x, y);
               // console.log('out', out, d, x, y);
@@ -119,24 +110,14 @@ function App() {
         </div>
       ))}</div>
       <button onClick={() => setColors([])}>reset</button>
+      <button onClick={() => setI(i + 1)}>background</button>
       <div>{(predictions || []).map(prediction => (
-        <div key={prediction.class}>{prediction.score.toFixed(3)} for {prediction.class}</div>
+        <div key={[prediction.class, prediction.score].join(':')}>{prediction.score.toFixed(3)} for {prediction.class}</div>
       ))}</div>
     </div>
   );
 }
 
-/*
-<button
-  onClick={async function() {
-    const img = document.querySelector('img');
-    const model = await cocoSsd.load();
-    const predictions = await model.detect(img);
-    setPredictions(predictions);
-  }}
->go
-</button>
-*/
 
 export default App;
 
@@ -202,4 +183,33 @@ function matchesAny(r, g, b, colors) {
     Math.abs(c[2] - b) < 5
   )).length > 0);
 
+}
+
+// load coco and predict
+function useCoco(canvas, isReady) {
+  const [coco, setCoco] = useState(null);
+  const [predictions, setPredictions] = useState([]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    console.log('loading coco...');
+    cocoSsd.load().then(model => setCoco(model));
+  }, [isReady]);
+
+  useEffect(() => {
+    if (!coco) return;
+    var abort = false;
+    function predict() {
+      console.log('predicting...');
+      coco.detect(canvas).then(predictions => {
+        setPredictions(predictions);
+        console.log('  predicted.');
+        if (!abort) setTimeout(predict, 5000);
+      });
+    }
+    predict();
+    return () => abort = true;
+  }, [coco, isReady, canvas]);
+
+  return predictions;
 }
