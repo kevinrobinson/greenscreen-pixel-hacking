@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@tensorflow-models/body-pix": "^1.1.1",
     "@tensorflow-models/coco-ssd": "^1.1.1",
     "@tensorflow/tfjs": "^1.2.2",
     "chroma-js": "^2.0.4",

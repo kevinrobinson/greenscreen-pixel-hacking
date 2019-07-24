@@ -1211,11 +1211,6 @@
     "@svgr/plugin-svgo" "^4.0.3"
     loader-utils "^1.1.0"
 
-"@tensorflow-models/body-pix@^1.1.1":
-  version "1.1.1"
-  resolved "https://registry.yarnpkg.com/@tensorflow-models/body-pix/-/body-pix-1.1.1.tgz#4f9f9e5159e1c18a77b9d8c604bbde95471a2a05"
-  integrity sha512-l9bd+b3QI7OzJjw/OuhEfeGRb5l2lRivgDHGMvQbT2Snn8nV7odHSRW55NzhU7Khl7vga00TWo5QDuVnkevQmQ==
-
 "@tensorflow-models/coco-ssd@^1.1.1":
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/@tensorflow-models/coco-ssd/-/coco-ssd-1.1.1.tgz#b9f66eb0f4713134fb5510c416ea0694dfa8f399"
